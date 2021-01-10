@@ -1,0 +1,158 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: clairsvc
+  labels:
+    app: clair
+spec:
+  type: NodePort
+  ports:
+  - port: 6060
+    protocol: TCP
+    nodePort: 30060
+    name: clair-port0
+  - port: 6061
+    protocol: TCP
+    nodePort: 30061
+    name: clair-port1
+  selector:
+    app: clair
+---
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: clair
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: clair
+    spec:
+      volumes:
+      - name: secret-volume
+        secret:
+          secretName: clairsecret
+      containers:
+      - name: clair
+        image: quay.io/coreos/clair
+        args:
+          - "-config"
+          - "/config/config.yaml"
+        ports:
+        - containerPort: 6060
+        - containerPort: 6061
+        volumeMounts:
+        - mountPath: /config
+          name: secret-volume
+---
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  labels:
+    app: postgres
+  name: clair-postgres
+spec:
+  replicas: 1
+  selector:
+    app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_PASSWORD
+          value: password
+        image: postgres:latest
+        imagePullPolicy: Always
+        name: postgres
+        ports:
+        - containerPort: 5432
+          name: postgres-port
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: postgres
+  name: postgres
+spec:
+  ports:
+    - port: 5432
+  selector:
+    app: postgres
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: clairsecret
+type: Opaque
+stringData:
+  config.yaml: |
+    clair:
+      database:
+        # Database driver
+        type: pgsql
+        options:
+          # PostgreSQL Connection string
+          # https://www.postgresql.org/docs/current/static/libpq-connect.html#LIBPQ-CONNSTRING
+          source: postgres://postgres:password@postgres:5432/postgres?sslmode=disable
+
+          # Number of elements kept in the cache
+          # Values unlikely to change (e.g. namespaces) are cached in order to save prevent needless roundtrips to the database.
+          cachesize: 16384
+
+      api:
+        # API server port
+        port: 6060
+
+        # Health server port
+        # This is an unencrypted endpoint useful for load balancers to check to healthiness of the clair server.
+        healthport: 6061
+
+        # Deadline before an API request will respond with a 503
+        timeout: 900s
+
+        # 32-bit URL-safe base64 key used to encrypt pagination tokens
+        # If one is not provided, it will be generated.
+        # Multiple clair instances in the same cluster need the same value.
+        paginationkey:
+
+        # Optional PKI configuration
+        # If you want to easily generate client certificates and CAs, try the following projects:
+        # https://github.com/coreos/etcd-ca
+        # https://github.com/cloudflare/cfssl
+        servername:
+        cafile:
+        keyfile:
+        certfile:
+
+      updater:
+        # Frequency the database will be updated with vulnerabilities from the default data sources
+        # The value 0 disables the updater entirely.
+        interval: 2h
+
+      notifier:
+        # Number of attempts before the notification is marked as failed to be sent
+        attempts: 3
+
+        # Duration before a failed notification is retried
+        renotifyinterval: 2h
+
+        http:
+          # Optional endpoint that will receive notifications via POST requests
+          endpoint:
+
+          # Optional PKI configuration
+          # If you want to easily generate client certificates and CAs, try the following projects:
+          # https://github.com/cloudflare/cfssl
+          # https://github.com/coreos/etcd-ca
+          servername:
+          cafile:
+          keyfile:
+          certfile:
+
+          # Optional HTTP Proxy: must be a valid URL (including the scheme).
+          proxy:
