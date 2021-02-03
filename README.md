@@ -9,14 +9,19 @@ He dejado dos formas de despliegue, un all in one para aplicar solo un archivo o
 
 - All in one
 ```bash
-kubectl apply -f v2/k8s/all-in-one-clair.yaml
+kubectl apply -f ./k8s/all-in-one-clair.yaml
 ```
 
 - Primero el secret y luego los manifiestos
 ```bash
-kubectl create secret generic clairsecret --from-file=./v2/k8s/config.yaml
-kubectl apply -f v2/k8s/clair-k8s.yaml
+kubectl create secret generic clairsecret --from-file=./k8s/config.yaml
+kubectl apply -f ./k8s/clair-k8s.yaml
 ```
 
 ### Todo
 - VPC
+
+
+Ref:
+- https://coreos.com/clair/docs/latest/
+- 
